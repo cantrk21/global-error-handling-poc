@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="tr">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Global Error Handling · Python Lab</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#e5edf8;background:#0b1220}*{box-sizing:border-box}body{max-width:1120px;margin:auto;padding:40px 24px}header small{color:#6ce4c1;letter-spacing:2px}h1{font-size:clamp(28px,5vw,46px);margin:12px 0}p{line-height:1.7;color:#b3c2d9}a{color:#6ce4c1}.flow{display:flex;flex-wrap:wrap;gap:10px;margin:28px 0}.flow span{padding:12px 16px;background:#18243a;border-radius:8px}.grid{display:grid;grid-template-columns:1fr 1.2fr;gap:24px}section{background:#111d30;border:1px solid #2a3951;border-radius:16px;padding:24px}button{width:100%;text-align:left;background:#1c2b43;color:#e5edf8;border:1px solid #354865;border-radius:8px;padding:13px;margin:5px 0;cursor:pointer;font-size:15px}button:hover,button:focus-visible{border-color:#6ce4c1;background:#263b53}button:disabled{opacity:.5;cursor:wait}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#080f1c;padding:18px;border-radius:8px;min-height:210px;font-size:13px;line-height:1.6}#status{font-size:23px;color:#6ce4c1}#explanation{min-height:95px}code{color:#9de9d2}footer{margin-top:26px;color:#9dacbf;font-size:14px}@media(max-width:760px){.grid{grid-template-columns:1fr}body{padding:24px 16px}}
+</style>
+<header><small>PYTHON / FASTAPI / UYGULAMALI PoC</small><h1>Hata bir yerde oluşur.<br>Yanıt bir merkezde şekillenir.</h1><p>Bir senaryo seç. Gerçek backend isteğinin durum kodunu, ortak hata gövdesini ve hatanın geçtiği yolu gör.</p></header>
+<div class="flow"><span>① HTTP isteği</span><span>② Doğrulama → endpoint → servis</span><span>③ Uygun exception handler</span><span>④ JSON yanıtı</span></div>
+<div class="grid"><section><h2>Senaryoyu çalıştır</h2><p>Ürün: Python kitabı · ID: 1 · Stok: 3<br>Siparişler önizlemedir; stok değişmez.</p><div id="scenarios"></div><p><a href="/docs" target="_blank" rel="noopener">Swagger ile kendin istek gönder ↗</a></p></section><section aria-live="polite"><h2>Backend yanıtı</h2><div id="status">Henüz istek gönderilmedi</div><p id="request"></p><p id="explanation">Önce başarılı isteği, ardından 404 ve 500 senaryolarını karşılaştır.</p><pre id="result">Bir senaryo seç…</pre><p id="trace"></p></section></div>
+<footer>Global handler iş kuralını düzeltmez; hatayı tutarlı bir API yanıtına çevirir. Bu laboratuvar HTTP istekleri içindir; arka plan işleri ayrıca hata yönetimi gerektirir.</footer>
+<script>
+const cases=[
+ ['200 · Ürünü getir','GET','/products/1',null,'İstek → endpoint → servis → normal yanıt. Exception olmadığı için hata handler’ı çalışmaz.'],
+ ['200 · Sipariş önizlemesi','POST','/orders/preview',{product_id:1,quantity:2},'Miktar stoktan az. Servis normal sonuç döndürür.'],
+ ['404 · Ürün bulunamadı','GET','/products/999',null,'Servis ProductNotFound fırlatır → DomainError handler → 404 / PRODUCT_NOT_FOUND. Endpoint içinde try/except yok.'],
+ ['409 · Stok yetersiz','POST','/orders/preview',{product_id:1,quantity:4},'İstek biçimi geçerli ama iş kuralı sağlanmıyor. InsufficientStock → DomainError handler → 409.'],
+ ['422 · Geçersiz miktar','POST','/orders/preview',{product_id:1,quantity:0},'FastAPI/Pydantic girdiyi reddeder → RequestValidationError handler → 422. Endpoint ve servis çalışmaz.'],
+ ['404 · Olmayan adres','GET','/missing',null,'Router adresi bulamaz → Starlette HTTPException handler → 404 / HTTP_404. Ürünün bulunamamasından farklı hata kodu.'],
+ ['401 · HTTP başlığını koru','GET','/demo/unauthorized',null,'HTTPException → HTTP handler → 401. WWW-Authenticate başlığı korunur. Bu yalnızca bir demo; gerçek giriş sistemi değil.'],
+ ['500 · Beklenmeyen hata','GET','/demo/crash',null,'RuntimeError → Exception handler → güvenli 500. Ayrıntı ve traceback sunucu logunda; aynı request_id ile bulabilirsin.']
+];
+for(const [label,method,path,body,explanation] of cases){
+ const button=document.createElement('button');button.textContent=label;
+ button.onclick=async()=>{
+  document.querySelectorAll('button').forEach(b=>b.disabled=true);
+  document.getElementById('status').textContent='İstek gönderiliyor…';
+  document.getElementById('request').textContent=method+' '+path+(body?' · '+JSON.stringify(body):'');
+  document.getElementById('explanation').textContent=explanation;
+  document.getElementById('trace').textContent='';
+  try{
+   const response=await fetch(path,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+   document.getElementById('status').textContent='HTTP '+response.status;
+   document.getElementById('result').textContent=JSON.stringify(await response.json(),null,2);
+   document.getElementById('trace').textContent='X-Request-ID: '+response.headers.get('x-request-id')+(response.headers.get('www-authenticate')?' · WWW-Authenticate: '+response.headers.get('www-authenticate'):'');
+  }catch(error){document.getElementById('status').textContent='Bağlantı hatası';document.getElementById('result').textContent='Backend erişilemiyor veya yanıt okunamadı: '+error.message;}
+  finally{document.querySelectorAll('button').forEach(b=>b.disabled=false);}
+ };
+ document.getElementById('scenarios').append(button);
+}
+</script></html>
